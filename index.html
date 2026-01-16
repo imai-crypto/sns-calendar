@@ -1091,61 +1091,128 @@
         }
 
         // カレンダー形式のデータを生成（現在表示中の月）
+        // カレンダー形式のデータを生成（Excel貼付用レイアウト）
         function generateCalendarTable() {
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth();
-            const firstDay = new Date(year, month, 1);
-            const lastDay = new Date(year, month + 1, 0);
-            const startDay = firstDay.getDay();
-            const daysInMonth = lastDay.getDate();
+
+            // 1. サマリーデータの集計
+            const counts = { 'TikTok': 0, 'IGリール': 0, 'IGフィード': 0, 'IGストーリー': 0, 'Total': 0, 'Weekday': 0, 'Holiday': 0 };
+            const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+
+            for (let d = 1; d <= lastDayOfMonth; d++) {
+                const date = new Date(year, month, d);
+                const posts = getPostsForDate(date);
+                if (posts.length > 0) {
+                    counts.Total += posts.length;
+                    const dw = date.getDay();
+                    if (dw === 0 || dw === 6 || getHolidayName(date)) {
+                        counts.Holiday += posts.length;
+                    } else {
+                        counts.Weekday += posts.length;
+                    }
+                    posts.forEach(p => {
+                        if (counts[p.platform] !== undefined) counts[p.platform]++;
+                    });
+                }
+            }
 
             const rows = [];
-            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
 
-            // ヘッダー行
+            // 2. ヘッダー情報の追加
+            rows.push([`${year}年${month + 1}月`, '', '', '', '', '', '']); // 年月
+
+            // サマリー行 (Excelで一目で見れるように)
+            // フォーマット: [値, 値, 値...] の形式で列に配置
+            rows.push([
+                `Total: ${counts.Total}`,
+                `平日: ${counts.Weekday}`,
+                `土日祝: ${counts.Holiday}`,
+                `TT: ${counts.TikTok}`,
+                `IGR: ${counts['IGリール']}`,
+                `IGF: ${counts['IGフィード']}`,
+                `IGS: ${counts['IGストーリー']}`
+            ]);
+            rows.push([]); // 空行
+
+            // 3. 曜日ヘッダー
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
             rows.push(dayNames);
 
-            let week = [];
+            // 4. カレンダー本体（日付行とデータ行のペア）
+            const firstDate = new Date(year, month, 1);
+            const startDayOfWeek = firstDate.getDay();
 
-            // 前月の空白セル
-            for (let i = 0; i < startDay; i++) {
-                week.push('');
+            // カレンダーの開始日（前月分含む、日曜始まり）
+            let currentCalcDate = new Date(year, month, 1);
+            currentCalcDate.setDate(1 - startDayOfWeek);
+
+            // 6週間分生成（最大42セル）
+            const maxWeeks = 6;
+            const calendarCells = [];
+
+            for (let i = 0; i < maxWeeks * 7; i++) {
+                const date = new Date(currentCalcDate);
+                date.setDate(date.getDate() + i);
+
+                const isCurrentMonth = date.getMonth() === month;
+                const posts = getPostsForDate(date);
+
+                // ソート設定: 時刻順 (値がない場合は後ろへ)
+                posts.sort((a, b) => {
+                    const timeA = a.time || '23:59';
+                    const timeB = b.time || '23:59';
+                    return timeA.localeCompare(timeB);
+                });
+
+                // 投稿テキスト生成
+                const postLines = posts.map(p => {
+                    const parts = [];
+                    // 略語
+                    const abbr = { 'TikTok': 'TT', 'IGリール': 'IGR', 'IGフィード': 'IGF', 'IGストーリー': 'IGS' }[p.platform] || p.platform;
+
+                    // フォーマット: [作品名] 時間 媒体 タイトル
+                    if (p.workName) parts.push(`[${p.workName}]`);
+                    if (p.time) parts.push(p.time);
+                    parts.push(abbr);
+                    if (p.title) parts.push(p.title);
+
+                    return parts.join(' ');
+                });
+
+                // セル内テキスト
+                let contentText = postLines.join('\n');
+
+                // 当月外で投稿がない場合はハイフンなどで視覚的に区別（お好みで）
+                if (!isCurrentMonth && posts.length === 0) {
+                    contentText = '-';
+                }
+
+                calendarCells.push({
+                    day: date.getDate(),
+                    content: contentText,
+                    isCurrentMonth: isCurrentMonth
+                });
             }
 
-            // 当月の日付
-            for (let day = 1; day <= daysInMonth; day++) {
-                const currentDay = new Date(year, month, day);
-                const posts = getPostsForDate(currentDay);
+            // 週ごとに分割して行に追加
+            for (let w = 0; w < maxWeeks; w++) {
+                const weekCells = calendarCells.slice(w * 7, (w + 1) * 7);
 
-                // セルの内容を作成
-                let cellContent = day.toString();
-                if (posts.length > 0) {
-                    const postTexts = posts.map(p => {
-                        const parts = [];
-                        if (p.workName) parts.push(`[${p.workName}]`);
-                        if (p.time) parts.push(p.time);
-                        parts.push(p.platform);
-                        if (p.title) parts.push(p.title);
-                        return parts.join(' ');
-                    });
-                    cellContent = day + '\n' + postTexts.join('\n');
-                }
+                // 表示判定:
+                // 1. その週に「当月」の日付が含まれている
+                // 2. または、最初の週 (w===0) である（前月の日付表示のため）
+                const shouldDisplay = w === 0 || weekCells.some(c => c.isCurrentMonth);
 
-                week.push(cellContent);
+                if (!shouldDisplay) break;
 
-                // 週の終わり（土曜日）または月末
-                if (week.length === 7) {
-                    rows.push([...week]);
-                    week = [];
-                }
-            }
+                // 日付行
+                const dateRow = weekCells.map(c => c.day);
+                rows.push(dateRow);
 
-            // 残りの空白セル
-            if (week.length > 0) {
-                while (week.length < 7) {
-                    week.push('');
-                }
-                rows.push(week);
+                // データ行
+                const contentRow = weekCells.map(c => c.content);
+                rows.push(contentRow);
             }
 
             return rows;
@@ -1162,9 +1229,17 @@
             const year = currentDate.getFullYear();
             const month = currentDate.getMonth() + 1;
 
-            // タイトル行を追加
-            const title = `${year}年${month}月 投稿カレンダー`;
-            const tsv = title + '\n\n' + rows.map(row => row.join('\t')).join('\n');
+            // TSV生成（Excel貼り付け用にセル内改行などをエスケープ）
+            const tsv = rows.map(row =>
+                row.map(cell => {
+                    const strCell = String(cell);
+                    // 改行、タブ、ダブルクォートが含まれる場合はダブルクォートで囲む
+                    if (strCell.includes('\n') || strCell.includes('\t') || strCell.includes('"')) {
+                        return '"' + strCell.replace(/"/g, '""') + '"';
+                    }
+                    return strCell;
+                }).join('\t')
+            ).join('\n');
 
             navigator.clipboard.writeText(tsv).then(() => {
                 const status = document.getElementById('fileStatus');
