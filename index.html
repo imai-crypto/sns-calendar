@@ -114,8 +114,8 @@
                     <button onclick="goToToday()"
                         class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50">今月</button>
                 </div>
-                <!-- Upload Button -->
-                <div class="flex items-center gap-4">
+                <!-- Upload & Export Buttons -->
+                <div class="flex items-center gap-3">
                     <label for="excelFile"
                         class="flex items-center gap-2 cursor-pointer bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 transition-all">
                         <span class="material-symbols-outlined text-sm">upload_file</span>
@@ -123,6 +123,16 @@
                     </label>
                     <input type="file" id="excelFile" accept=".xlsx,.xlsm,.xls" class="hidden"
                         onchange="handleFileUpload(event)" />
+                    <button onclick="copyCalendarToClipboard()"
+                        class="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-green-700 transition-all">
+                        <span class="material-symbols-outlined text-sm">content_copy</span>
+                        <span>コピー</span>
+                    </button>
+                    <button onclick="downloadCalendarCSV()"
+                        class="flex items-center gap-2 bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-gray-800 transition-all">
+                        <span class="material-symbols-outlined text-sm">download</span>
+                        <span>CSV</span>
+                    </button>
                     <div id="fileStatus" class="text-sm text-gray-500"></div>
                 </div>
             </header>
@@ -554,6 +564,135 @@
         function goToToday() {
             currentDate = new Date();
             renderCalendar();
+        }
+
+        // カレンダー形式のデータを生成（現在表示中の月）
+        function generateCalendarTable() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDay = firstDay.getDay();
+            const daysInMonth = lastDay.getDate();
+
+            const rows = [];
+            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+
+            // ヘッダー行
+            rows.push(dayNames);
+
+            let week = [];
+
+            // 前月の空白セル
+            for (let i = 0; i < startDay; i++) {
+                week.push('');
+            }
+
+            // 当月の日付
+            for (let day = 1; day <= daysInMonth; day++) {
+                const currentDay = new Date(year, month, day);
+                const posts = getPostsForDate(currentDay);
+
+                // セルの内容を作成
+                let cellContent = day.toString();
+                if (posts.length > 0) {
+                    const postTexts = posts.map(p => {
+                        const parts = [];
+                        if (p.workName) parts.push(`[${p.workName}]`);
+                        if (p.time) parts.push(p.time);
+                        parts.push(p.platform);
+                        if (p.title) parts.push(p.title);
+                        return parts.join(' ');
+                    });
+                    cellContent = day + '\n' + postTexts.join('\n');
+                }
+
+                week.push(cellContent);
+
+                // 週の終わり（土曜日）または月末
+                if (week.length === 7) {
+                    rows.push([...week]);
+                    week = [];
+                }
+            }
+
+            // 残りの空白セル
+            if (week.length > 0) {
+                while (week.length < 7) {
+                    week.push('');
+                }
+                rows.push(week);
+            }
+
+            return rows;
+        }
+
+        // クリップボードにコピー（スプレッドシート用タブ区切り）
+        function copyCalendarToClipboard() {
+            if (calendarData.length === 0) {
+                alert('まずExcelファイルをアップロードしてください');
+                return;
+            }
+
+            const rows = generateCalendarTable();
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+
+            // タイトル行を追加
+            const title = `${year}年${month}月 投稿カレンダー`;
+            const tsv = title + '\n\n' + rows.map(row => row.join('\t')).join('\n');
+
+            navigator.clipboard.writeText(tsv).then(() => {
+                const status = document.getElementById('fileStatus');
+                status.textContent = 'カレンダーをコピーしました！';
+                status.className = 'text-sm text-green-500';
+                setTimeout(() => {
+                    status.textContent = '';
+                }, 3000);
+            }).catch(err => {
+                alert('コピーに失敗しました: ' + err);
+            });
+        }
+
+        // CSVダウンロード
+        function downloadCalendarCSV() {
+            if (calendarData.length === 0) {
+                alert('まずExcelファイルをアップロードしてください');
+                return;
+            }
+
+            const rows = generateCalendarTable();
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth() + 1;
+
+            // CSVを生成（セル内改行を扱うため、ダブルクォートで囲む）
+            const csv = rows.map(row =>
+                row.map(cell => {
+                    if (cell.includes('\n') || cell.includes(',') || cell.includes('"')) {
+                        return '"' + cell.replace(/"/g, '""') + '"';
+                    }
+                    return cell;
+                }).join(',')
+            ).join('\n');
+
+            // BOM付きUTF-8でダウンロード
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([bom, csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `calendar_${year}_${month}.csv`;
+            a.click();
+
+            URL.revokeObjectURL(url);
+
+            const status = document.getElementById('fileStatus');
+            status.textContent = 'CSVをダウンロードしました！';
+            status.className = 'text-sm text-green-500';
+            setTimeout(() => {
+                status.textContent = '';
+            }, 3000);
         }
 
         // 初期化
