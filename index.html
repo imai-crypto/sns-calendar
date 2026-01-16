@@ -42,17 +42,64 @@
 
         .calendar-container {
             display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            grid-auto-rows: minmax(140px, auto);
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            /* 6週分が画面に収まるように固定高さ */
+            grid-template-rows: repeat(6, minmax(0, 1fr));
+            height: calc(100vh - 120px);
+            /* さらに高さを広げる */
+        }
+
+        .day-cell {
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .day-cell-content {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
         }
 
         .post-card {
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
 
         .post-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .overflow-indicator {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, white 50%);
+            padding-top: 12px;
+            text-align: center;
+        }
+
+        .summary-bar {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+
+        /* ホバーポップアップのスタイル */
+        .hover-popup {
+            position: fixed;
+            z-index: 50;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            width: 250px;
+            max-height: 400px;
+            overflow-y: auto;
+            pointer-events: auto;
+            /* 操作可能にする */
         }
     </style>
 </head>
@@ -113,6 +160,10 @@
                     </div>
                     <button onclick="goToToday()"
                         class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50">今月</button>
+                    <!-- 月間サマリー -->
+                    <div id="monthlySummary" class="flex items-center gap-3 ml-4 pl-4 border-l border-gray-300 h-8">
+                        <!-- ここにサマリーが動的に挿入されます -->
+                    </div>
                 </div>
                 <!-- Upload & Export Buttons -->
                 <div class="flex items-center gap-3">
@@ -144,25 +195,25 @@
                 <div class="flex items-center gap-2">
                     <span class="text-xs font-medium text-gray-500">媒体:</span>
                     <div class="flex gap-2">
-                        <button onclick="filterPlatform('all')"
-                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-primary bg-primary/5 px-3 active">
-                            <p class="text-primary text-xs font-bold leading-normal">すべて</p>
+                        <button onclick="togglePlatform('all')" id="btn-all"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary transition-all">
+                            <p class="text-xs font-bold leading-normal">すべて</p>
                         </button>
-                        <button onclick="filterPlatform('IGリール')"
-                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
-                            <p class="text-gray-600 text-xs font-medium leading-normal">IGリール</p>
+                        <button onclick="togglePlatform('TikTok')" id="btn-tiktok" data-platform="TikTok"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary transition-all">
+                            <p class="text-xs font-medium leading-normal">TikTok</p>
                         </button>
-                        <button onclick="filterPlatform('IGストーリー')"
-                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
-                            <p class="text-gray-600 text-xs font-medium leading-normal">IGストーリー</p>
+                        <button onclick="togglePlatform('IGリール')" id="btn-ig-reel" data-platform="IGリール"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary transition-all">
+                            <p class="text-xs font-medium leading-normal">IGリール</p>
                         </button>
-                        <button onclick="filterPlatform('IGフィード')"
-                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
-                            <p class="text-gray-600 text-xs font-medium leading-normal">IGフィード</p>
+                        <button onclick="togglePlatform('IGフィード')" id="btn-ig-feed" data-platform="IGフィード"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary transition-all">
+                            <p class="text-xs font-medium leading-normal">IGフィード</p>
                         </button>
-                        <button onclick="filterPlatform('TikTok')"
-                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
-                            <p class="text-gray-600 text-xs font-medium leading-normal">TikTok</p>
+                        <button onclick="togglePlatform('IGストーリー')" id="btn-ig-story" data-platform="IGストーリー"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary transition-all">
+                            <p class="text-xs font-medium leading-normal">IGストーリー</p>
                         </button>
                     </div>
                 </div>
@@ -200,8 +251,12 @@
     <script>
         let currentDate = new Date();
         let calendarData = [];
-        let currentFilter = 'all';
+        // 複数選択フィルタに変更
+        const allPlatformList = ['TikTok', 'IGリール', 'IGフィード', 'IGストーリー'];
+        let selectedPlatforms = new Set(allPlatformList);
         let currentWorkNameFilter = 'all';
+        // 媒体の優先順位（ソート用）統一: TT -> IGR -> IGF -> IGS
+        const PLATFORM_PRIORITY = { 'TikTok': 1, 'IGリール': 2, 'IGフィード': 3, 'IGストーリー': 4 };
 
         // ステータスの色マッピング
         const statusColors = {
@@ -220,6 +275,79 @@
             'TikTok': 'music_video',
             'default': 'send'
         };
+
+        // フィルター操作（複数選択対応）
+        function togglePlatform(platform) {
+            if (platform === 'all') {
+                // すべて選択
+                allPlatformList.forEach(p => selectedPlatforms.add(p));
+            } else {
+                if (selectedPlatforms.has(platform)) {
+                    selectedPlatforms.delete(platform);
+                } else {
+                    selectedPlatforms.add(platform);
+                }
+
+                // 何も選択されていない状態を回避するか？ 
+                // 現在はゼロ件表示を許容する動作
+            }
+
+            updateFilterButtons();
+            renderCalendar();
+        }
+
+        function updateFilterButtons() {
+            // 'all' ボタン
+            const btnAll = document.getElementById('btn-all');
+            const isAllSelected = allPlatformList.every(p => selectedPlatforms.has(p));
+
+            setButtonActive(btnAll, isAllSelected);
+
+            // 個別ボタン
+            allPlatformList.forEach(p => {
+                let btnId = '';
+                if (p === 'IGリール') btnId = 'btn-ig-reel';
+                if (p === 'IGストーリー') btnId = 'btn-ig-story';
+                if (p === 'IGフィード') btnId = 'btn-ig-feed';
+                if (p === 'TikTok') btnId = 'btn-tiktok';
+
+                const btn = document.getElementById(btnId);
+                if (btn) setButtonActive(btn, selectedPlatforms.has(p));
+            });
+        }
+
+        function setButtonActive(btn, isActive) {
+            const activeClasses = ['border-primary', 'bg-primary/5', 'text-primary'];
+            const inactiveClasses = ['border-gray-200', 'bg-white', 'text-gray-600'];
+
+            // テキスト要素（pタグ）を取得
+            const textElem = btn.querySelector('p');
+
+            if (isActive) {
+                btn.classList.add(...activeClasses);
+                btn.classList.remove(...inactiveClasses);
+                if (textElem) {
+                    textElem.classList.add('text-primary');
+                    textElem.classList.remove('text-gray-600');
+                }
+            } else {
+                btn.classList.remove(...activeClasses);
+                btn.classList.add(...inactiveClasses);
+                if (textElem) {
+                    textElem.classList.remove('text-primary');
+                    textElem.classList.add('text-gray-600');
+                }
+            }
+        }
+
+        // 作品名フィルター
+        function filterWorkName(name) {
+            currentWorkNameFilter = name;
+            renderCalendar();
+        }
+
+
+
 
         // Excelファイル読み込み
         function handleFileUpload(event) {
@@ -250,7 +378,7 @@
                     // シートを2次元配列として読み込み（ヘッダー行を自動検出するため）
                     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-                    console.log('生データの最初の10行:', rawData.slice(0, 10));
+
 
                     // ヘッダー行を検出（「日程」列を含む行を探す）
                     let headerRowIndex = -1;
@@ -262,7 +390,7 @@
                             const rowStr = row.join(',').toLowerCase();
                             if (rowStr.includes('日程') || rowStr.includes('投稿プラットフォーム')) {
                                 headerRowIndex = i;
-                                console.log(`ヘッダー行を発見: 行 ${i + 1}`, row);
+
                                 break;
                             }
                         }
@@ -277,7 +405,7 @@
 
                     // ヘッダー行からカラム名を取得
                     const headers = rawData[headerRowIndex];
-                    console.log('検出されたヘッダー:', headers);
+
 
                     // データ行を取得（ヘッダー行の次から）
                     const dataRows = rawData.slice(headerRowIndex + 1);
@@ -293,11 +421,8 @@
                         return obj;
                     }).filter(obj => Object.keys(obj).length > 0);
 
-                    console.log('変換後のデータ件数:', jsonData.length);
-                    if (jsonData.length > 0) {
-                        console.log('列名:', Object.keys(jsonData[0]));
-                        console.log('最初の3行:', jsonData.slice(0, 3));
-                    }
+
+
 
                     // データを変換
                     calendarData = processExcelData(jsonData);
@@ -314,6 +439,9 @@
 
                     // カレンダーを再描画
                     renderCalendar();
+
+                    // データを永続化保存
+                    saveCalendarData(calendarData);
 
                 } catch (error) {
                     console.error('Excel読み込みエラー:', error);
@@ -390,6 +518,69 @@
             });
         }
 
+        // 日本の祝日判定 (2024-2026対応、簡易版)
+        function getHolidayName(date) {
+            const year = date.getFullYear();
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const dayOfWeek = date.getDay();
+
+            // 春分・秋分の日の簡易計算 (2000-2030年まで有効な近似式)
+            const vernalEquinoxDay = Math.floor(20.8431 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+            const autumnalEquinoxDay = Math.floor(23.2488 + 0.242194 * (year - 1980) - Math.floor((year - 1980) / 4));
+
+            // 固定祝日
+            if (month === 1 && day === 1) return '元日';
+            if (month === 2 && day === 11) return '建国記念の日';
+            if (month === 2 && day === 23) return '天皇誕生日';
+            if (month === 3 && day === vernalEquinoxDay) return '春分の日';
+            if (month === 4 && day === 29) return '昭和の日';
+            if (month === 5 && day === 3) return '憲法記念日';
+            if (month === 5 && day === 4) return 'みどりの日';
+            if (month === 5 && day === 5) return 'こどもの日';
+            if (month === 8 && day === 11) return '山の日';
+            if (month === 9 && day === autumnalEquinoxDay) return '秋分の日';
+            if (month === 11 && day === 3) return '文化の日';
+            if (month === 11 && day === 23) return '勤労感謝の日';
+
+            // ハッピーマンデー (成人の日: 1月第2月曜, 海の日: 7月第3月曜, 敬老の日: 9月第3月曜, スポーツの日: 10月第2月曜)
+            function isNthMonday(n, targetMonth) {
+                if (month !== targetMonth || dayOfWeek !== 1) return false;
+                // n週目かどうかの計算: (day - 1) / 7 の商が n-1 であれば n週目
+                return Math.floor((day - 1) / 7) === (n - 1);
+            }
+
+            if (isNthMonday(2, 1)) return '成人の日';
+            if (isNthMonday(3, 7)) return '海の日';
+            if (isNthMonday(3, 9)) return '敬老の日';
+            if (isNthMonday(2, 10)) return 'スポーツの日';
+
+            // 振替休日判定 (日曜と重なった場合の翌日)
+            // 簡易的に「昨日が祝日で日曜だった場合」などをチェックするのは再帰が必要で複雑になるため、
+            // カレンダー描画ループ内で前日の状態を持つか、主要な振替休日をハードコードするか。
+            // ここでは主要な祝日が日曜の場合の翌日を判定する簡易ロジックを入れる。
+
+            // 昨日の日付
+            const yesterday = new Date(date);
+            yesterday.setDate(day - 1);
+            // 昨日が日曜かつ祝日なら今日は振替休日
+            if (yesterday.getDay() === 0) {
+                const yesterdayName = getHolidayName(yesterday);
+                if (yesterdayName && yesterdayName !== '振替休日') return '振替休日';
+            }
+
+            // 5/6振替休日の特例 (5/3, 5/4, 5/5のいずれかが日曜なら振替)
+            if (month === 5 && day === 6) {
+                if (new Date(year, 4, 3).getDay() === 0 ||
+                    new Date(year, 4, 4).getDay() === 0 ||
+                    new Date(year, 4, 5).getDay() === 0) {
+                    return '振替休日';
+                }
+            }
+
+            return null;
+        }
+
         // カレンダー描画
         function renderCalendar() {
             const year = currentDate.getFullYear();
@@ -405,33 +596,115 @@
             const grid = document.getElementById('calendarGrid');
             grid.innerHTML = '';
 
+            // 月間サマリー集計用
+            const monthlyCounts = {
+                'TikTok': 0, 'IGリール': 0, 'IGフィード': 0, 'IGストーリー': 0,
+                'Total': 0, 'Weekday': 0, 'Holiday': 0
+            };
+
             // 前月の日付
             const prevMonthLastDay = new Date(year, month, 0).getDate();
             for (let i = startDay - 1; i >= 0; i--) {
                 const day = prevMonthLastDay - i;
-                grid.appendChild(createDayCell(day, null, true));
+                const date = new Date(year, month - 1, day);
+                grid.appendChild(createDayCell(day, null, true, date));
             }
 
             // 当月の日付
             for (let day = 1; day <= daysInMonth; day++) {
                 const currentDay = new Date(year, month, day);
                 const posts = getPostsForDate(currentDay);
-                grid.appendChild(createDayCell(day, posts, false));
+
+                // 集計
+                if (posts.length > 0) {
+                    const count = posts.length;
+                    monthlyCounts['Total'] += count;
+
+                    // 平日・休日判定
+                    const dw = currentDay.getDay();
+                    if (dw === 0 || dw === 6 || getHolidayName(currentDay)) {
+                        monthlyCounts['Holiday'] += count;
+                    } else {
+                        monthlyCounts['Weekday'] += count;
+                    }
+
+                    posts.forEach(post => {
+                        if (monthlyCounts[post.platform] !== undefined) {
+                            monthlyCounts[post.platform]++;
+                        }
+                    });
+                }
+
+                grid.appendChild(createDayCell(day, posts, false, currentDay));
             }
 
             // 次月の日付
             const totalCells = Math.ceil((startDay + daysInMonth) / 7) * 7;
             const remainingCells = totalCells - (startDay + daysInMonth);
             for (let day = 1; day <= remainingCells; day++) {
-                grid.appendChild(createDayCell(day, null, true));
+                const date = new Date(year, month + 1, day);
+                grid.appendChild(createDayCell(day, null, true, date));
             }
+
+            // サマリー表示の更新
+            updateMonthlySummary(monthlyCounts);
+        }
+
+        // 月間サマリーの表示更新
+        function updateMonthlySummary(counts) {
+            const summaryContainer = document.getElementById('monthlySummary');
+            if (!summaryContainer) return;
+
+            summaryContainer.innerHTML = '';
+
+            // 合計、内訳、各媒体
+            const groups = [
+                {
+                    items: [
+                        { label: 'Total', value: counts['Total'], color: 'bg-indigo-600 text-white' }
+                    ]
+                },
+                {
+                    items: [
+                        { label: '平日', value: counts['Weekday'], color: 'bg-gray-100 text-gray-700' },
+                        { label: '土日祝', value: counts['Holiday'], color: 'bg-red-50 text-red-600' }
+                    ],
+                    separator: true
+                },
+                {
+                    items: [
+                        { label: 'TT', value: counts['TikTok'], color: 'bg-gray-800 text-white' },
+                        { label: 'IGR', value: counts['IGリール'], color: 'bg-pink-100 text-pink-600' },
+                        { label: 'IGF', value: counts['IGフィード'], color: 'bg-pink-100 text-pink-600' },
+                        { label: 'IGS', value: counts['IGストーリー'], color: 'bg-pink-100 text-pink-600' }
+                    ]
+                }
+            ];
+
+            groups.forEach((group, index) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'flex items-center gap-2';
+                if (group.separator) groupDiv.classList.add('mobile-hidden', 'border-l', 'border-gray-200', 'pl-3', 'ml-1');
+
+                group.items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'flex items-center gap-1';
+                    div.innerHTML = `<span class="text-xs font-bold text-gray-500">${item.label}:</span> <span class="text-xs font-bold px-2 py-0.5 rounded ${item.color}">${item.value}</span>`;
+                    groupDiv.appendChild(div);
+                });
+
+                summaryContainer.appendChild(groupDiv);
+            });
         }
 
         // 指定日の投稿を取得
         function getPostsForDate(date) {
             return calendarData.filter(post => {
                 if (!post.date) return false;
-                if (currentFilter !== 'all' && post.platform !== currentFilter) return false;
+
+                // 複数選択フィルターの適用
+                if (!selectedPlatforms.has(post.platform)) return false;
+
                 if (currentWorkNameFilter !== 'all' && post.workName !== currentWorkNameFilter) return false;
                 return post.date.getFullYear() === date.getFullYear() &&
                     post.date.getMonth() === date.getMonth() &&
@@ -440,98 +713,349 @@
         }
 
         // 日付セルを作成
-        function createDayCell(day, posts, isOtherMonth) {
+        function createDayCell(day, posts, isOtherMonth, dateObj) {
             const cell = document.createElement('div');
-            cell.className = `calendar-grid-line p-2 hover:bg-gray-50 ${isOtherMonth ? 'bg-gray-50/50 opacity-40' : ''}`;
+
+            let bgClass = '';
+            let textClass = '';
+            let holidayName = '';
+
+            if (dateObj) {
+                const dayOfWeek = dateObj.getDay();
+                holidayName = getHolidayName(dateObj);
+
+                if (dayOfWeek === 0 || holidayName) { // 日曜または祝日
+                    bgClass = isOtherMonth ? 'bg-red-50/20' : 'bg-red-50/50';
+                    textClass = 'text-red-500';
+                } else if (dayOfWeek === 6) { // 土曜
+                    bgClass = isOtherMonth ? 'bg-blue-50/20' : 'bg-blue-50/50';
+                    textClass = 'text-blue-500';
+                }
+            }
+
+            cell.className = `calendar-grid-line day-cell p-1 hover:bg-gray-50/80 transition-colors ${isOtherMonth ? 'opacity-40' : ''} ${bgClass}`;
+
+            // ヘッダー部分（日付＋祝日名＋サマリー）
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'flex items-center justify-between mb-1';
+
+            const dayInfo = document.createElement('div');
+            dayInfo.className = 'flex items-center gap-1';
 
             const dayNumber = document.createElement('span');
-            dayNumber.className = 'text-sm font-semibold';
+            dayNumber.className = `text-xs font-bold ${textClass}`;
             dayNumber.textContent = day;
-            cell.appendChild(dayNumber);
+            dayInfo.appendChild(dayNumber);
 
+            if (holidayName) {
+                const holidaySpan = document.createElement('span');
+                holidaySpan.className = 'text-[8px] text-red-500 font-medium truncate max-w-[60px] hidden sm:inline';
+                holidaySpan.textContent = holidayName;
+                dayInfo.appendChild(holidaySpan);
+            }
+
+            headerDiv.appendChild(dayInfo);
+
+            // 媒体別サマリーを追加
             if (posts && posts.length > 0) {
-                const postsContainer = document.createElement('div');
-                postsContainer.className = 'mt-2 space-y-1';
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = 'summary-bar';
 
+                // 媒体別にカウント
+                const platformCounts = {};
                 posts.forEach(post => {
-                    const postCard = createPostCard(post);
+                    platformCounts[post.platform] = (platformCounts[post.platform] || 0) + 1;
+                });
+
+                // 合計バッジ
+                const totalBadge = document.createElement('span');
+                totalBadge.className = 'text-[8px] px-1 rounded font-bold bg-indigo-50 text-indigo-600 mr-0.5 border border-indigo-100';
+                totalBadge.textContent = `計${posts.length}`;
+                summaryDiv.appendChild(totalBadge);
+
+                // 表示順序と略語を定義（TT, IGR, IGF, IGS）
+                const platformOrder = [
+                    { key: 'TikTok', abbr: 'TT', isIG: false },
+                    { key: 'IGリール', abbr: 'IGR', isIG: true },
+                    { key: 'IGフィード', abbr: 'IGF', isIG: true },
+                    { key: 'IGストーリー', abbr: 'IGS', isIG: true }
+                ];
+
+                platformOrder.forEach(({ key, abbr, isIG }) => {
+                    const count = platformCounts[key];
+                    if (count) {
+                        const badge = document.createElement('span');
+                        badge.className = `text-[8px] px-1 rounded font-bold ${isIG ? 'bg-pink-100 text-pink-600' : 'bg-gray-700 text-white'}`;
+                        badge.textContent = `${abbr}${count}`;
+                        summaryDiv.appendChild(badge);
+                    }
+                });
+
+                headerDiv.appendChild(summaryDiv);
+            }
+
+            cell.appendChild(headerDiv);
+
+            // 投稿カード部分（オーバーフロー対応）
+            if (posts && posts.length > 0) {
+                const groupedPosts = groupPostsByWorkName(posts);
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'day-cell-content';
+
+                const postsContainer = document.createElement('div');
+                postsContainer.className = 'space-y-px'; // 間隔をさらに詰める
+                postsContainer.id = `posts-${day}-${Math.random().toString(36).substr(2, 9)}`;
+
+                // 最大表示件数（高さを考慮して2件に変更）
+                // 画面高さが非常に小さい場合は1件にするなどのロジックも検討可能だが、基本2件とする
+                const maxVisible = 2;
+                const visibleGroups = groupedPosts.slice(0, maxVisible);
+                const hiddenGroups = groupedPosts.slice(maxVisible);
+                const hiddenCount = hiddenGroups.length;
+
+                visibleGroups.forEach(group => {
+                    const postCard = createGroupedPostCard(group);
                     postsContainer.appendChild(postCard);
                 });
 
-                cell.appendChild(postsContainer);
+                contentDiv.appendChild(postsContainer);
+
+                // オーバーフロー表示（ホバー＆クリック対応）
+                if (hiddenCount > 0) {
+                    const overflowDiv = document.createElement('div');
+                    overflowDiv.className = 'overflow-indicator cursor-pointer';
+
+                    const overflowSpan = document.createElement('span');
+                    overflowSpan.className = 'text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors';
+                    overflowSpan.textContent = `+${hiddenCount}件`;
+
+                    // ホバーイベント：ポップアップ表示
+                    overflowSpan.addEventListener('mouseenter', function (e) {
+                        if (window.popupHideTimeout) clearTimeout(window.popupHideTimeout);
+
+                        const popup = document.getElementById('hoverPopup');
+                        popup.innerHTML = ''; // クリア
+
+                        hiddenGroups.forEach(group => {
+                            const postCard = createGroupedPostCard(group);
+                            popup.appendChild(postCard);
+                        });
+
+                        // 位置調整
+                        const rect = e.target.getBoundingClientRect();
+                        const windowHeight = window.innerHeight;
+                        const popupHeight = popup.offsetHeight || (hiddenGroups.length * 60); // 推定高さ
+
+                        // 基本は下方向に表示、画面下にはみ出る場合は上方向に表示
+                        let top = rect.bottom + 5;
+                        if (top + popupHeight > windowHeight - 20) {
+                            top = rect.top - popupHeight - 5;
+                        }
+
+                        popup.style.top = `${top}px`;
+                        // 左端揃え、ただし右にはみ出る場合は右寄せ
+                        let left = rect.left;
+                        if (left + 250 > window.innerWidth - 20) {
+                            left = window.innerWidth - 270;
+                        }
+                        popup.style.left = `${left}px`;
+
+                        // 高さを再計算して表示
+                        popup.style.display = 'block';
+
+                        // 表示後に高さが確定するので、再度位置調整が必要な場合に対応
+                        const finalHeight = popup.offsetHeight;
+                        if (rect.bottom + 5 + finalHeight > windowHeight - 20) {
+                            popup.style.top = `${rect.top - finalHeight - 5}px`;
+                        }
+
+                        // ポップアップ自体のホバー設定
+                        popup.onmouseenter = function () {
+                            if (window.popupHideTimeout) clearTimeout(window.popupHideTimeout);
+                        };
+                        popup.onmouseleave = function () {
+                            window.popupHideTimeout = setTimeout(() => {
+                                popup.style.display = 'none';
+                            }, 300);
+                        };
+                    });
+
+                    // ホバー解除：ポップアップ非表示（遅延）
+                    overflowSpan.addEventListener('mouseleave', function () {
+                        window.popupHideTimeout = setTimeout(() => {
+                            const popup = document.getElementById('hoverPopup');
+                            popup.style.display = 'none';
+                        }, 300);
+                    });
+
+                    // クリックで全件表示（トグル動作）
+                    overflowSpan.onclick = function (e) {
+                        e.stopPropagation();
+                        // 隠れている投稿を追加表示
+                        hiddenGroups.forEach(group => {
+                            const postCard = createGroupedPostCard(group);
+                            postCard.classList.add('hidden-item'); // クラス付与（識別用）
+                            postsContainer.appendChild(postCard);
+                        });
+
+                        // +X件を非表示にし、代わりに閉じるボタンを表示
+                        overflowDiv.style.display = 'none';
+                        contentDiv.style.overflow = 'auto'; // スクロール可能に
+
+                        // 閉じるボタンを作成
+                        const closeDiv = document.createElement('div');
+                        closeDiv.className = 'text-center py-1 sticky bottom-0 bg-white/90 cursor-pointer border-t border-gray-100 mt-1';
+                        closeDiv.innerHTML = '<span class="text-[9px] text-gray-400 hover:text-gray-600">▲ 閉じる</span>';
+
+                        closeDiv.onclick = function (ev) {
+                            ev.stopPropagation();
+                            // 追加したアイテムを削除
+                            const hiddenItems = postsContainer.querySelectorAll('.hidden-item');
+                            hiddenItems.forEach(item => item.remove());
+
+                            // 状態を元に戻す
+                            closeDiv.remove();
+                            overflowDiv.style.display = 'block';
+                            contentDiv.style.overflow = 'hidden';
+                            contentDiv.scrollTop = 0;
+                        };
+
+                        contentDiv.appendChild(closeDiv);
+                    };
+
+                    overflowDiv.appendChild(overflowSpan);
+                    contentDiv.appendChild(overflowDiv);
+                }
+
+                cell.appendChild(contentDiv);
             }
 
             return cell;
         }
 
-        // 投稿カードを作成
-        function createPostCard(post) {
-            const colors = statusColors[post.status] || statusColors.default;
-            const icon = platformIcons[post.platform] || platformIcons.default;
+        // 作品名＋タイトルでグループ化
+        function groupPostsByWorkName(posts) {
+            const groups = {};
 
+            posts.forEach(post => {
+                // グループキー: 作品名＋タイトルの組み合わせ
+                const key = `${post.workName || ''}|||${post.title || ''}`;
+
+                if (!groups[key]) {
+                    groups[key] = {
+                        workName: post.workName,
+                        title: post.title,
+                        brand: post.brand,
+                        time: post.time,
+                        description: post.description,
+                        platforms: [],
+                        posts: []
+                    };
+                }
+
+                groups[key].platforms.push(post.platform);
+                groups[key].posts.push(post);
+
+                // 時間が設定されている投稿を優先
+                if (post.time && !groups[key].time) {
+                    groups[key].time = post.time;
+                }
+            });
+
+            const result = Object.values(groups);
+
+            // 媒体の優先順位（TT > IGリール > IGフィード > IGストーリー）
+            const priorityMap = { 'TikTok': 1, 'IGリール': 2, 'IGフィード': 3, 'IGストーリー': 4 };
+
+            // 優先順位に基づいてソート
+            result.sort((a, b) => {
+                // 各グループ内で最も優先度が高い媒体を取得して比較
+                const getMinPriority = (group) => {
+                    let min = 99;
+                    group.platforms.forEach(p => {
+                        const pVal = priorityMap[p] || 99;
+                        if (pVal < min) min = pVal;
+                    });
+                    return min;
+                };
+
+                return getMinPriority(a) - getMinPriority(b);
+            });
+
+            return result;
+        }
+
+        // グループ化された投稿カードを作成
+        function createGroupedPostCard(group) {
             const card = document.createElement('div');
-            card.className = `post-card p-2 bg-white border ${colors.border} rounded-lg shadow-sm cursor-pointer`;
-            card.title = `${post.workName}\n${post.title}\n${post.description}`;
+            // パディングを p-2 -> p-1 に削減
+            card.className = 'post-card p-1 bg-white border border-gray-200 rounded-lg shadow-sm cursor-pointer border-l-2 border-l-indigo-400';
+
+            // ツールチップに全詳細を表示
+            const tooltipLines = group.posts.map(p => `${p.platform}: ${p.title}`);
+            card.title = `${group.workName || ''}\n${tooltipLines.join('\n')}\n${group.description || ''}`;
 
             // ブランドと時間のヘッダー
-            if (post.brand || post.time) {
+            if (group.brand || group.time) {
                 const headerDiv = document.createElement('div');
-                headerDiv.className = 'flex items-center gap-2 mb-1 text-[9px] text-gray-400';
-                headerDiv.innerHTML = `${post.brand ? `<span class="font-medium">${post.brand}</span>` : ''}${post.time ? `<span>${post.time}</span>` : ''}`;
+                headerDiv.className = 'flex items-center gap-1 mb-0.5 text-[8px] text-gray-400';
+                headerDiv.innerHTML = `${group.brand ? `<span class="font-medium truncate">${group.brand}</span>` : ''}${group.time ? `<span class="ml-auto">${group.time}</span>` : ''}`;
                 card.appendChild(headerDiv);
             }
 
             // 作品名を表示
-            if (post.workName) {
+            if (group.workName) {
                 const workNameDiv = document.createElement('div');
-                workNameDiv.className = 'text-[9px] font-bold text-gray-700 truncate mb-0.5';
-                workNameDiv.textContent = post.workName;
+                workNameDiv.className = 'text-[9px] font-bold text-gray-700 truncate leading-tight';
+                workNameDiv.textContent = group.workName;
                 card.appendChild(workNameDiv);
             }
 
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'flex gap-2 items-start';
+            // タイトル（投稿名）を表示
+            if (group.title) {
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'text-[8px] text-gray-500 truncate mb-0.5 leading-tight';
+                titleDiv.textContent = group.title;
+                card.appendChild(titleDiv);
+            }
 
-            const iconDiv = document.createElement('div');
-            // プラットフォームごとの色分け（IG系はピンク、TikTokは黒）
-            const isIG = post.platform.startsWith('IG');
-            iconDiv.className = `flex items-center justify-center shrink-0 ${isIG ? 'text-pink-500' : post.platform === 'TikTok' ? 'text-gray-800' : 'text-gray-600'}`;
-            iconDiv.innerHTML = `<span class="material-symbols-outlined text-base">${icon}</span>`;
-            contentDiv.appendChild(iconDiv);
+            // プラットフォームを略語で表示
+            const platformsDiv = document.createElement('div');
+            platformsDiv.className = 'flex items-center gap-1 flex-wrap';
 
-            const textDiv = document.createElement('div');
-            textDiv.className = 'flex-1 overflow-hidden min-w-0';
-            textDiv.innerHTML = `
-                <p class="text-[10px] leading-tight font-medium truncate">${post.title}</p>
-                <span class="text-[9px] text-gray-400">${post.platform}</span>
-            `;
-            contentDiv.appendChild(textDiv);
+            // 略語マッピング
+            const platformAbbr = {
+                'IGリール': 'IGR',
+                'IGストーリー': 'IGS',
+                'IGフィード': 'IGF',
+                'TikTok': 'TT'
+            };
 
-            card.appendChild(contentDiv);
+            // 重複を除いたプラットフォームリスト
+            const uniquePlatforms = [...new Set(group.platforms)];
+
+            // ソート（優先順位マップを使用）
+            const priorityMap = { 'TikTok': 1, 'IGリール': 2, 'IGフィード': 3, 'IGストーリー': 4 };
+            uniquePlatforms.sort((a, b) => (priorityMap[a] || 99) - (priorityMap[b] || 99));
+
+            uniquePlatforms.forEach(platform => {
+                const abbr = platformAbbr[platform] || platform;
+                const isIG = platform.startsWith('IG');
+                const count = group.platforms.filter(p => p === platform).length;
+
+                const abbrSpan = document.createElement('span');
+                abbrSpan.className = `inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold ${isIG ? 'bg-pink-100 text-pink-600' : 'bg-gray-800 text-white'}`;
+                abbrSpan.textContent = count > 1 ? `${abbr}×${count}` : abbr;
+                platformsDiv.appendChild(abbrSpan);
+            });
+
+            card.appendChild(platformsDiv);
+
             return card;
         }
 
-        // フィルター機能
-        function filterPlatform(platform) {
-            currentFilter = platform;
 
-            // ボタンのスタイル更新
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-primary/5', 'border-primary');
-                btn.classList.add('bg-white', 'border-gray-200');
-                const p = btn.querySelector('p');
-                p.classList.remove('text-primary', 'font-bold');
-                p.classList.add('text-gray-600', 'font-medium');
-            });
-
-            event.target.closest('.filter-btn').classList.add('active', 'bg-primary/5', 'border-primary');
-            event.target.closest('.filter-btn').classList.remove('bg-white', 'border-gray-200');
-            const p = event.target.closest('.filter-btn').querySelector('p');
-            p.classList.add('text-primary', 'font-bold');
-            p.classList.remove('text-gray-600', 'font-medium');
-
-            renderCalendar();
-        }
 
         // 作品名ドロップダウンを更新
         function updateWorkNameFilter() {
@@ -695,11 +1219,57 @@
             }, 3000);
         }
 
+        // データの保存（localStorage）
+        function saveCalendarData(data) {
+            try {
+                // 日付オブジェクトなどはJSON化で文字列になるので注意
+                localStorage.setItem('sns_calendar_data', JSON.stringify(data));
+                localStorage.setItem('sns_calendar_updated', new Date().toLocaleString());
+            } catch (e) {
+                console.error('保存エラー:', e);
+                // 容量オーバーなどの場合
+                alert('データ量が多すぎるため、ブラウザに自動保存できませんでした。\n(表示自体は可能ですが、リロードするとリセットされます)');
+            }
+        }
+
+        // データの読み込み（localStorage）
+        function loadCalendarData() {
+            const saved = localStorage.getItem('sns_calendar_data');
+            const savedTime = localStorage.getItem('sns_calendar_updated');
+
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // 日付文字列をDateオブジェクトに復元
+                    calendarData = parsed.map(item => ({
+                        ...item,
+                        date: new Date(item.date)
+                    }));
+
+                    if (calendarData.length > 0) {
+                        // 読み込み成功したら描画だけする（アラートは出さない）
+                        renderCalendar();
+                        updateWorkNameFilter();
+
+                        const fileStatus = document.getElementById('fileStatus');
+                        fileStatus.textContent = `前回保存データ: ${calendarData.length}件 (${savedTime})`;
+                        fileStatus.className = 'text-sm text-gray-500';
+                    }
+                } catch (e) {
+                    console.error('読み込みエラー:', e);
+                    localStorage.removeItem('sns_calendar_data'); // 壊れたデータは削除
+                }
+            }
+        }
+
         // 初期化
         document.addEventListener('DOMContentLoaded', function () {
-            renderCalendar();
+            renderCalendar(); // まず空のカレンダーを描画
+            loadCalendarData(); // 保存データがあれば上書き描画
         });
     </script>
+    <!-- ホバーポップアップ -->
+    <div id="hoverPopup" class="hover-popup space-y-1"></div>
 </body>
 
 </html>
