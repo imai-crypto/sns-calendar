@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html class="light" lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>投稿カレンダー - Excel連携</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <!-- SheetJS library for Excel file reading -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0dccf2",
+                        "background-light": "#f5f8f8",
+                        "background-dark": "#101f22",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        .calendar-grid-line {
+            border-bottom: 1px solid #e5e7eb;
+            border-right: 1px solid #e5e7eb;
+        }
+
+        .calendar-container {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-auto-rows: minmax(140px, auto);
+        }
+
+        .post-card {
+            transition: all 0.2s;
+        }
+
+        .post-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark font-display text-[#111718] antialiased">
+    <div class="flex h-screen overflow-hidden">
+        <!-- Sidebar Navigation -->
+        <aside
+            class="w-64 border-r border-gray-200 bg-white dark:bg-background-dark dark:border-gray-800 flex flex-col">
+            <div class="p-6 flex items-center gap-3">
+                <div class="size-10 bg-primary rounded-lg flex items-center justify-center text-white">
+                    <span class="material-symbols-outlined">analytics</span>
+                </div>
+                <div>
+                    <h1 class="text-base font-bold leading-tight">SNS Analytics</h1>
+                    <p class="text-xs text-[#60838a]">Calendar System</p>
+                </div>
+            </div>
+            <nav class="flex-1 px-4 space-y-1">
+                <a class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-gray-500 hover:bg-gray-50"
+                    href="dashboard.html">
+                    <span class="material-symbols-outlined">dashboard</span>
+                    Dashboard
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg bg-primary/10 text-primary"
+                    href="calendar-upload.html">
+                    <span class="material-symbols-outlined"
+                        style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+                    Content Calendar
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-gray-500 hover:bg-gray-50"
+                    href="analytics.html">
+                    <span class="material-symbols-outlined">bar_chart</span>
+                    Analytics
+                </a>
+                <a class="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-gray-500 hover:bg-gray-50"
+                    href="reports.html">
+                    <span class="material-symbols-outlined">settings</span>
+                    Settings
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <!-- Top Navigation Bar -->
+            <header
+                class="h-16 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-8">
+                <div class="flex items-center gap-6">
+                    <div class="flex items-center gap-2">
+                        <button onclick="changeMonth(-1)" class="p-1 hover:bg-gray-100 rounded-lg">
+                            <span class="material-symbols-outlined text-gray-600">chevron_left</span>
+                        </button>
+                        <h2 id="currentMonth" class="text-lg font-bold">2024年1月</h2>
+                        <button onclick="changeMonth(1)" class="p-1 hover:bg-gray-100 rounded-lg">
+                            <span class="material-symbols-outlined text-gray-600">chevron_right</span>
+                        </button>
+                    </div>
+                    <button onclick="goToToday()"
+                        class="px-4 py-1.5 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50">今月</button>
+                </div>
+                <!-- Upload Button -->
+                <div class="flex items-center gap-4">
+                    <label for="excelFile"
+                        class="flex items-center gap-2 cursor-pointer bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm hover:bg-primary/90 transition-all">
+                        <span class="material-symbols-outlined text-sm">upload_file</span>
+                        <span>Excelアップロード</span>
+                    </label>
+                    <input type="file" id="excelFile" accept=".xlsx,.xlsm,.xls" class="hidden"
+                        onchange="handleFileUpload(event)" />
+                    <div id="fileStatus" class="text-sm text-gray-500"></div>
+                </div>
+            </header>
+
+            <!-- Filter Chips -->
+            <div
+                class="bg-white dark:bg-background-dark border-b border-gray-200 dark:border-gray-800 px-8 py-3 flex items-center gap-6 overflow-x-auto">
+                <!-- 媒体フィルター -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-medium text-gray-500">媒体:</span>
+                    <div class="flex gap-2">
+                        <button onclick="filterPlatform('all')"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-primary bg-primary/5 px-3 active">
+                            <p class="text-primary text-xs font-bold leading-normal">すべて</p>
+                        </button>
+                        <button onclick="filterPlatform('IGリール')"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
+                            <p class="text-gray-600 text-xs font-medium leading-normal">IGリール</p>
+                        </button>
+                        <button onclick="filterPlatform('IGストーリー')"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
+                            <p class="text-gray-600 text-xs font-medium leading-normal">IGストーリー</p>
+                        </button>
+                        <button onclick="filterPlatform('IGフィード')"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
+                            <p class="text-gray-600 text-xs font-medium leading-normal">IGフィード</p>
+                        </button>
+                        <button onclick="filterPlatform('TikTok')"
+                            class="filter-btn flex h-7 shrink-0 items-center justify-center gap-x-2 rounded-full border border-gray-200 bg-white px-3 hover:border-primary">
+                            <p class="text-gray-600 text-xs font-medium leading-normal">TikTok</p>
+                        </button>
+                    </div>
+                </div>
+                <!-- 作品名フィルター -->
+                <div class="flex items-center gap-2 border-l border-gray-200 pl-6">
+                    <span class="text-xs font-medium text-gray-500">作品名:</span>
+                    <select id="workNameFilter" onchange="filterWorkName(this.value)"
+                        class="h-7 px-3 text-xs border border-gray-200 rounded-full bg-white focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer">
+                        <option value="all">すべて</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Calendar Container -->
+            <div class="flex-1 overflow-auto bg-gray-50 dark:bg-background-dark/50">
+                <!-- Day Labels -->
+                <div
+                    class="grid grid-cols-7 border-b border-gray-200 dark:border-gray-800 sticky top-0 bg-white dark:bg-background-dark z-10">
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">日</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">月</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">火</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">水</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">木</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">金</div>
+                    <div class="py-2 text-center text-xs font-bold text-gray-400 uppercase tracking-wider">土</div>
+                </div>
+                <!-- Calendar Grid -->
+                <div id="calendarGrid" class="calendar-container bg-white dark:bg-background-dark">
+                    <!-- Days will be generated here by JavaScript -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let currentDate = new Date();
+        let calendarData = [];
+        let currentFilter = 'all';
+        let currentWorkNameFilter = 'all';
+
+        // ステータスの色マッピング
+        const statusColors = {
+            '制作予定': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300' },
+            '制作中': { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300' },
+            '投稿済み': { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300' },
+            '予約完了': { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30' },
+            'default': { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300' }
+        };
+
+        // SNSアイコンマッピング
+        const platformIcons = {
+            'IGリール': 'movie',
+            'IGストーリー': 'auto_stories',
+            'IGフィード': 'photo_camera',
+            'TikTok': 'music_video',
+            'default': 'send'
+        };
+
+        // Excelファイル読み込み
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const fileStatus = document.getElementById('fileStatus');
+            fileStatus.textContent = '読み込み中...';
+            fileStatus.className = 'text-sm text-blue-500';
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+
+                    // 「全体カレンダー」シートを読み込み
+                    const sheetName = '全体カレンダー';
+                    if (!workbook.SheetNames.includes(sheetName)) {
+                        alert(`シート「${sheetName}」が見つかりません。\n利用可能なシート: ${workbook.SheetNames.join(', ')}`);
+                        fileStatus.textContent = 'エラー: シートが見つかりません';
+                        fileStatus.className = 'text-sm text-red-500';
+                        return;
+                    }
+
+                    const worksheet = workbook.Sheets[sheetName];
+
+                    // シートを2次元配列として読み込み（ヘッダー行を自動検出するため）
+                    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+                    console.log('生データの最初の10行:', rawData.slice(0, 10));
+
+                    // ヘッダー行を検出（「日程」列を含む行を探す）
+                    let headerRowIndex = -1;
+                    const targetColumns = ['日程', '投稿プラットフォーム', '投稿名', 'ブランド'];
+
+                    for (let i = 0; i < Math.min(rawData.length, 20); i++) {
+                        const row = rawData[i];
+                        if (row && Array.isArray(row)) {
+                            const rowStr = row.join(',').toLowerCase();
+                            if (rowStr.includes('日程') || rowStr.includes('投稿プラットフォーム')) {
+                                headerRowIndex = i;
+                                console.log(`ヘッダー行を発見: 行 ${i + 1}`, row);
+                                break;
+                            }
+                        }
+                    }
+
+                    if (headerRowIndex === -1) {
+                        alert('ヘッダー行が見つかりません。\n「日程」または「投稿プラットフォーム」列を含む行が必要です。\n\n最初の5行の内容:\n' + rawData.slice(0, 5).map((r, i) => `行${i + 1}: ${r.slice(0, 5).join(', ')}`).join('\n'));
+                        fileStatus.textContent = 'エラー: ヘッダー行が見つかりません';
+                        fileStatus.className = 'text-sm text-red-500';
+                        return;
+                    }
+
+                    // ヘッダー行からカラム名を取得
+                    const headers = rawData[headerRowIndex];
+                    console.log('検出されたヘッダー:', headers);
+
+                    // データ行を取得（ヘッダー行の次から）
+                    const dataRows = rawData.slice(headerRowIndex + 1);
+
+                    // データをオブジェクト配列に変換
+                    const jsonData = dataRows.map(row => {
+                        const obj = {};
+                        headers.forEach((header, index) => {
+                            if (header && row[index] !== undefined) {
+                                obj[header] = row[index];
+                            }
+                        });
+                        return obj;
+                    }).filter(obj => Object.keys(obj).length > 0);
+
+                    console.log('変換後のデータ件数:', jsonData.length);
+                    if (jsonData.length > 0) {
+                        console.log('列名:', Object.keys(jsonData[0]));
+                        console.log('最初の3行:', jsonData.slice(0, 3));
+                    }
+
+                    // データを変換
+                    calendarData = processExcelData(jsonData);
+
+                    fileStatus.textContent = `${calendarData.length}件のデータを読み込みました`;
+                    fileStatus.className = calendarData.length > 0 ? 'text-sm text-green-500' : 'text-sm text-orange-500';
+
+                    if (calendarData.length === 0 && jsonData.length > 0) {
+                        alert(`データは読み込まれましたが、有効な日程データが0件です。\n\n読み込まれた列名: ${Object.keys(jsonData[0]).join(', ')}\n\n日程列の値を確認してください。`);
+                    }
+
+                    // 作品名ドロップダウンを更新
+                    updateWorkNameFilter();
+
+                    // カレンダーを再描画
+                    renderCalendar();
+
+                } catch (error) {
+                    console.error('Excel読み込みエラー:', error);
+                    alert('Excelファイルの読み込みに失敗しました。\n' + error.message);
+                    fileStatus.textContent = 'エラー: 読み込み失敗';
+                    fileStatus.className = 'text-sm text-red-500';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Excelデータを処理
+        function processExcelData(jsonData) {
+            // 対象プラットフォームのリスト
+            const allowedPlatforms = ['IGリール', 'IGストーリー', 'IGフィード', 'TikTok'];
+
+            return jsonData.map(row => {
+                // 日付の処理（ユーザーのExcel列名「日程」に対応）
+                let postDate = null;
+                const dateField = row['日程'] || row['投稿日'] || row['日付'] || row['Date'] || row['投稿予定日'];
+
+                if (dateField) {
+                    if (typeof dateField === 'number') {
+                        // Excelのシリアル値の場合
+                        postDate = XLSX.SSF.parse_date_code(dateField);
+                        postDate = new Date(postDate.y, postDate.m - 1, postDate.d);
+                    } else {
+                        postDate = new Date(dateField);
+                    }
+                }
+
+                // 投稿プラットフォームをそのまま取得
+                let platform = row['投稿プラットフォーム'] || row['SNS'] || row['媒体'] || row['Platform'] || '';
+
+                // プラットフォーム名の正規化（表記揺れ対応）
+                const platformLower = platform.toLowerCase();
+                if (platformLower.includes('リール') || platformLower.includes('reel')) {
+                    platform = 'IGリール';
+                } else if (platformLower.includes('ストーリー') || platformLower.includes('story') || platformLower.includes('stories')) {
+                    platform = 'IGストーリー';
+                } else if (platformLower.includes('フィード') || platformLower.includes('feed')) {
+                    platform = 'IGフィード';
+                } else if (platformLower.includes('tiktok')) {
+                    platform = 'TikTok';
+                }
+
+                // 時間の処理（Excelシリアル値を時刻文字列に変換）
+                let timeValue = row['時間'] || '';
+                if (typeof timeValue === 'number') {
+                    // Excelのシリアル値（0.5 = 12:00）を時刻に変換
+                    const totalMinutes = Math.round(timeValue * 24 * 60);
+                    const hours = Math.floor(totalMinutes / 60);
+                    const minutes = totalMinutes % 60;
+                    timeValue = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                }
+
+                return {
+                    date: postDate,
+                    title: row['投稿名'] || row['タイトル'] || row['Title'] || '',
+                    workName: row['作品名'] || '',
+                    status: row['ステータス'] || row['Status'] || '投稿予定',
+                    platform: platform,
+                    brand: row['ブランド'] || '',
+                    time: timeValue,
+                    description: row['内容／備考'] || row['詳細'] || row['説明'] || row['Description'] || '',
+                    specialDay: row['注意日／記念日'] || '',
+                    thumbnail: row['サムネイル'] || row['Thumbnail'] || ''
+                };
+            }).filter(item => {
+                // 日付が有効で、対象プラットフォームのみをフィルタリング
+                const hasValidDate = item.date && !isNaN(item.date.getTime());
+                const isAllowedPlatform = allowedPlatforms.includes(item.platform);
+                return hasValidDate && isAllowedPlatform;
+            });
+        }
+
+        // カレンダー描画
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+
+            document.getElementById('currentMonth').textContent = `${year}年${month + 1}月`;
+
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            const startDay = firstDay.getDay();
+            const daysInMonth = lastDay.getDate();
+
+            const grid = document.getElementById('calendarGrid');
+            grid.innerHTML = '';
+
+            // 前月の日付
+            const prevMonthLastDay = new Date(year, month, 0).getDate();
+            for (let i = startDay - 1; i >= 0; i--) {
+                const day = prevMonthLastDay - i;
+                grid.appendChild(createDayCell(day, null, true));
+            }
+
+            // 当月の日付
+            for (let day = 1; day <= daysInMonth; day++) {
+                const currentDay = new Date(year, month, day);
+                const posts = getPostsForDate(currentDay);
+                grid.appendChild(createDayCell(day, posts, false));
+            }
+
+            // 次月の日付
+            const totalCells = Math.ceil((startDay + daysInMonth) / 7) * 7;
+            const remainingCells = totalCells - (startDay + daysInMonth);
+            for (let day = 1; day <= remainingCells; day++) {
+                grid.appendChild(createDayCell(day, null, true));
+            }
+        }
+
+        // 指定日の投稿を取得
+        function getPostsForDate(date) {
+            return calendarData.filter(post => {
+                if (!post.date) return false;
+                if (currentFilter !== 'all' && post.platform !== currentFilter) return false;
+                if (currentWorkNameFilter !== 'all' && post.workName !== currentWorkNameFilter) return false;
+                return post.date.getFullYear() === date.getFullYear() &&
+                    post.date.getMonth() === date.getMonth() &&
+                    post.date.getDate() === date.getDate();
+            });
+        }
+
+        // 日付セルを作成
+        function createDayCell(day, posts, isOtherMonth) {
+            const cell = document.createElement('div');
+            cell.className = `calendar-grid-line p-2 hover:bg-gray-50 ${isOtherMonth ? 'bg-gray-50/50 opacity-40' : ''}`;
+
+            const dayNumber = document.createElement('span');
+            dayNumber.className = 'text-sm font-semibold';
+            dayNumber.textContent = day;
+            cell.appendChild(dayNumber);
+
+            if (posts && posts.length > 0) {
+                const postsContainer = document.createElement('div');
+                postsContainer.className = 'mt-2 space-y-1';
+
+                posts.forEach(post => {
+                    const postCard = createPostCard(post);
+                    postsContainer.appendChild(postCard);
+                });
+
+                cell.appendChild(postsContainer);
+            }
+
+            return cell;
+        }
+
+        // 投稿カードを作成
+        function createPostCard(post) {
+            const colors = statusColors[post.status] || statusColors.default;
+            const icon = platformIcons[post.platform] || platformIcons.default;
+
+            const card = document.createElement('div');
+            card.className = `post-card p-2 bg-white border ${colors.border} rounded-lg shadow-sm cursor-pointer`;
+            card.title = `${post.workName}\n${post.title}\n${post.description}`;
+
+            // ブランドと時間のヘッダー
+            if (post.brand || post.time) {
+                const headerDiv = document.createElement('div');
+                headerDiv.className = 'flex items-center gap-2 mb-1 text-[9px] text-gray-400';
+                headerDiv.innerHTML = `${post.brand ? `<span class="font-medium">${post.brand}</span>` : ''}${post.time ? `<span>${post.time}</span>` : ''}`;
+                card.appendChild(headerDiv);
+            }
+
+            // 作品名を表示
+            if (post.workName) {
+                const workNameDiv = document.createElement('div');
+                workNameDiv.className = 'text-[9px] font-bold text-gray-700 truncate mb-0.5';
+                workNameDiv.textContent = post.workName;
+                card.appendChild(workNameDiv);
+            }
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'flex gap-2 items-start';
+
+            const iconDiv = document.createElement('div');
+            // プラットフォームごとの色分け（IG系はピンク、TikTokは黒）
+            const isIG = post.platform.startsWith('IG');
+            iconDiv.className = `flex items-center justify-center shrink-0 ${isIG ? 'text-pink-500' : post.platform === 'TikTok' ? 'text-gray-800' : 'text-gray-600'}`;
+            iconDiv.innerHTML = `<span class="material-symbols-outlined text-base">${icon}</span>`;
+            contentDiv.appendChild(iconDiv);
+
+            const textDiv = document.createElement('div');
+            textDiv.className = 'flex-1 overflow-hidden min-w-0';
+            textDiv.innerHTML = `
+                <p class="text-[10px] leading-tight font-medium truncate">${post.title}</p>
+                <span class="text-[9px] text-gray-400">${post.platform}</span>
+            `;
+            contentDiv.appendChild(textDiv);
+
+            card.appendChild(contentDiv);
+            return card;
+        }
+
+        // フィルター機能
+        function filterPlatform(platform) {
+            currentFilter = platform;
+
+            // ボタンのスタイル更新
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-primary/5', 'border-primary');
+                btn.classList.add('bg-white', 'border-gray-200');
+                const p = btn.querySelector('p');
+                p.classList.remove('text-primary', 'font-bold');
+                p.classList.add('text-gray-600', 'font-medium');
+            });
+
+            event.target.closest('.filter-btn').classList.add('active', 'bg-primary/5', 'border-primary');
+            event.target.closest('.filter-btn').classList.remove('bg-white', 'border-gray-200');
+            const p = event.target.closest('.filter-btn').querySelector('p');
+            p.classList.add('text-primary', 'font-bold');
+            p.classList.remove('text-gray-600', 'font-medium');
+
+            renderCalendar();
+        }
+
+        // 作品名ドロップダウンを更新
+        function updateWorkNameFilter() {
+            const select = document.getElementById('workNameFilter');
+            const workNames = [...new Set(calendarData.map(post => post.workName).filter(name => name))];
+            workNames.sort();
+
+            select.innerHTML = '<option value="all">すべて</option>';
+            workNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+        }
+
+        // 作品名フィルター
+        function filterWorkName(workName) {
+            currentWorkNameFilter = workName;
+            renderCalendar();
+        }
+
+        // 月を変更
+        function changeMonth(delta) {
+            currentDate.setMonth(currentDate.getMonth() + delta);
+            renderCalendar();
+        }
+
+        // 今月に戻る
+        function goToToday() {
+            currentDate = new Date();
+            renderCalendar();
+        }
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function () {
+            renderCalendar();
+        });
+    </script>
+</body>
+
+</html>
